@@ -1,18 +1,33 @@
 # Deepfake Sentinel Next
 
-A separate deployment-ready frontend for the Deepfake Sentinel research project, based on the original dashboard in [Deepfake-Sentinel](https://github.com/harshvshah12/Deepfake-Sentinel).
+A Vercel-hosted dashboard and Python API for the Deepfake Sentinel research project, based on [the original repository](https://github.com/harshvshah12/Deepfake-Sentinel).
 
-## Deployment boundary
-This repository serves the dashboard as a static site on Vercel. The original analysis UI expects a FastAPI/PyTorch service at the same origin (for example, `/predict`, `/predict-video`, `/predict-frame`, `/health`, and `/samples`). Static hosting does not run that model backend, and the model checkpoint files are not included in this repository. Therefore, UI deployment alone is not evidence that model inference is available.
+## Deployment
 
-## Local frontend preview
-Open `index.html` in a browser or run any static server from the repository root.
+1. Import this repository into Vercel and deploy with the default settings.
+2. In **Project → Settings → Environment Variables**, add `HF_TOKEN` with a Hugging Face token that can use Inference Providers. Optional: set `HF_MODEL_ID` to a compatible image-classification model.
+3. Redeploy after adding environment variables.
 
-## Full inference backend
-Use the original repository's Python backend and model assets, deploy it to a Python host that supports the required dependencies and model storage, then configure the frontend API base URL to that backend. Do not expose Gemini or other provider API keys in public client code.
+The API works without a token, but then uses image-statistics heuristics only. Those results are explicitly labelled **not a validated deepfake detector** and must not be treated as proof that an image is real or fake. With a configured model token, the API attempts model-backed image classification. Model output is still only a screening signal.
 
-## Scientific and provenance caveats
-A model score is not proof of authenticity. Heuristic watermark or metadata checks must not be described as cryptographic verification; C2PA requires validating a manifest and signature, and SynthID detection requires a supported detector. Video frame aggregation is not a trained temporal model unless one is actually loaded and evaluated.
+## Endpoints
 
-## License
-See the original project's license and preserve its notices when redistributing copied assets or code.
+- `GET /api/index/health` — API/model status
+- `POST /api/index/predict` — multipart image upload in field `file`
+- `POST /api/index/predict-frame` — JSON body with base64 image in `image`
+- `GET /api/index/model-metrics` — runtime metadata; no fabricated ROC/AUC results
+- `GET /api/index/samples` — bundled specimen metadata
+- `POST /api/index/feedback`, `GET /api/index/feedback-stats`
+- `POST /api/index/test-gemini-key` — validates a Gemini API key without persisting it
+
+## Known boundaries
+
+- A trained model requires `HF_TOKEN` and a compatible Hugging Face inference model.
+- The fallback is not a trained detector and is intentionally low-confidence.
+- Feedback is acknowledged but not persisted across serverless invocations.
+- The original video workflow still needs frame extraction to analyze video clips; a video file is not an image upload.
+- No independently measured benchmark scores are claimed by this deployment.
+
+## Local checks
+
+Install dependencies from `requirements.txt`, then run `pytest`. To run the API locally: `uvicorn api.index:app --reload`.
