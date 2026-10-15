@@ -258,6 +258,15 @@ async def test_gemini_key(payload: GeminiPayload):
         return JSONResponse(status_code=502, content={"success": False, "error": "Gemini could not be reached. Check the key and try again."})
 
 
-# Vercel may retain the function prefix in the ASGI path. Support both forms.
-for _route in ("health", "predict", "predict-frame", "model-metrics", "samples", "feedback", "feedback-stats", "test-gemini-key"):
-    pass
+# Support both ASGI path conventions used by Vercel Python Functions.
+for _path, _endpoint, _methods in [
+    ("health", health, ["GET"]),
+    ("predict", predict, ["POST"]),
+    ("predict-frame", predict_frame, ["POST"]),
+    ("model-metrics", model_metrics, ["GET"]),
+    ("samples", samples, ["GET"]),
+    ("feedback", feedback, ["POST"]),
+    ("feedback-stats", feedback_stats, ["GET"]),
+    ("test-gemini-key", test_gemini_key, ["POST"]),
+]:
+    app.add_api_route("/api/index/" + _path, _endpoint, methods=_methods, include_in_schema=False)
