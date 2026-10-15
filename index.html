@@ -1825,7 +1825,8 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
             document.getElementById('image-result-card').classList.remove('hidden');
 
             const isFake = data.prediction === 'Fake';
-            set3DState(isFake ? 'fake' : 'real');
+            const isInconclusive = data.prediction === 'Inconclusive' || data.analysis_mode === 'forensic_heuristics';
+            set3DState(isFake ? 'fake' : (isInconclusive ? 'scanning' : 'real'));
 
             const banner = document.getElementById('verdict-banner');
             const badge = document.getElementById('verdict-badge');
@@ -1841,7 +1842,14 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
                 }
             }
 
-            if (isFake) {
+            if (isInconclusive) {
+                banner.className = "glass-panel p-5 border-l-4 border-l-amber-400 bg-amber-950/20 flex items-center justify-between transition-all";
+                badge.className = "px-2.5 py-0.5 rounded-full text-xs font-black uppercase font-mono tracking-widest bg-amber-500/20 text-amber-300 border border-amber-500/30";
+                badge.innerText = "INCONCLUSIVE SCREENING";
+                title.innerText = "INSUFFICIENT EVIDENCE";
+                title.className = "text-xl font-black tracking-tight text-amber-300";
+                risk.innerText = data.model_note || "Heuristic fallback only; no reliable deepfake verdict is available.";
+            } else if (isFake) {
                 banner.className = "glass-panel p-5 border-l-4 border-l-rose-500 bg-rose-950/20 flex items-center justify-between transition-all";
                 badge.className = "px-2.5 py-0.5 rounded-full text-xs font-black uppercase font-mono tracking-widest bg-rose-500/20 text-rose-400 border border-rose-500/30";
                 badge.innerText = "SYNTHETIC DEEPFAKE";
