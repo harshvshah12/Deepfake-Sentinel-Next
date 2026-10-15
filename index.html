@@ -24,6 +24,7 @@
 </head>
 <body class="min-h-screen flex flex-col justify-between relative selection:bg-cyan-500/20 selection:text-cyan-400">
     <canvas id="canvas-bg"></canvas>
+    <div id="runtime-notice" role="status" class="relative z-20 px-4 py-2 text-center text-[11px] font-mono tracking-wide text-amber-200 bg-amber-500/10 border-b border-amber-500/20">API STATUS · Without HF_TOKEN, results use unvalidated image-statistics heuristics and must not be treated as proof of authenticity.</div>
     <header class="relative z-20 border-b border-white/10 bg-[#070A11]/85 backdrop-blur-xl sticky top-0 px-6 py-3.5 flex items-center justify-between">
         <div class="flex items-center gap-3.5">
             <div class="h-10 w-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
@@ -1378,7 +1379,7 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
                 const queryParams = new URLSearchParams({ attack, epsilon });
                 if (geminiKey) queryParams.append('gemini_key', geminiKey);
 
-                const response = await fetch(`/predict?${queryParams.toString()}`, {
+                const response = await fetch(`/api/index/predict?${queryParams.toString()}`, {
                     method: 'POST',
                     body: formData
                 });
@@ -1443,7 +1444,7 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
 
             // 1. Try testing via backend if available
             try {
-                const resp = await fetch('/test-gemini-key', {
+                const resp = await fetch('/api/index/test-gemini-key', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ api_key: key })
@@ -1544,7 +1545,7 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
             const hashes = lastAnalysisResult.hashes || {};
             
             try {
-                await fetch('/feedback', {
+                await fetch('/api/index/feedback', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1625,7 +1626,7 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
             document.getElementById('feedback-status-text').className = "text-[11px] text-amber-300 font-mono font-bold animate-pulse";
 
             try {
-                await fetch('/feedback', {
+                await fetch('/api/index/feedback', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1669,7 +1670,7 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
         async function initModelCharts() {
             let metrics;
             try {
-                const resp = await fetch('/model-metrics');
+                const resp = await fetch('/api/index/model-metrics');
                 metrics = await resp.json();
             } catch (e) {
                 metrics = {
@@ -1846,7 +1847,7 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
                 badge.innerText = "SYNTHETIC DEEPFAKE";
                 title.innerText = `${(data.fake_probability * 100).toFixed(1)}% FAKE`;
                 title.className = "text-2xl font-black tracking-tight text-rose-400 glow-text-crimson";
-                risk.innerText = data.feedback_applied ? "Human Verified Ground-Truth Override (Forced Fake)" : "High-Confidence Facial Manipulation Detected";
+                risk.innerText = data.analysis_mode === "forensic_heuristics" ? "HEURISTIC ONLY · NOT A VALIDATED DEEPFAKE DETECTOR" : (data.feedback_applied ? "Human Verified Ground-Truth Override (Forced Fake)" : "Model screening signal · verify independently");
             } else {
                 banner.className = "glass-panel p-5 border-l-4 border-l-emerald-400 bg-emerald-950/20 flex items-center justify-between transition-all";
                 badge.className = "px-2.5 py-0.5 rounded-full text-xs font-black uppercase font-mono tracking-widest bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
@@ -2027,7 +2028,7 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
             formData.append('file', currentVideoFile);
 
             try {
-                const response = await fetch('/predict', {
+                const response = await fetch('/api/index/predict', {
                     method: 'POST',
                     body: formData
                 });
@@ -2165,7 +2166,7 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
             const b64 = canvas.toDataURL('image/jpeg', 0.85);
 
             try {
-                const res = await fetch('/predict-frame', {
+                const res = await fetch('/api/index/api/index/predict-frame', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ image: b64 })
@@ -2231,7 +2232,7 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
 
         async function loadSampleGallery() {
             try {
-                const res = await fetch('/samples');
+                const res = await fetch('/api/index/samples');
                 const contentType = res.headers.get("content-type") || "";
                 if (!res.ok || !contentType.includes("application/json")) {
                     console.log("Specimen gallery endpoint inactive on static host.");
@@ -2359,7 +2360,7 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
                 document.getElementById('gemini-btn-label').innerText = "Gemini Key (Active)";
                 document.getElementById('gemini-key-btn').className = "px-3 py-1.5 rounded-lg text-xs font-mono font-medium bg-purple-500/20 text-purple-300 border border-purple-500/50 hover:bg-purple-500/30 transition-all flex items-center gap-1.5";
             }
-            fetch('/health').then(r => r.json()).then(d => {
+            fetch('/api/index/health').then(r => r.json()).then(d => {
                 document.getElementById('hardware-device').innerText = `${d.device.toUpperCase()} Active`;
             }).catch(() => {});
         });
