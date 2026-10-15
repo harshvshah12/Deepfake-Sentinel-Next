@@ -2017,33 +2017,91 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
                 alert("Please select a video file first.");
                 return;
             }
-
             const btn = document.getElementById('run-video-btn');
             btn.disabled = true;
-            btn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Analyzing Video Trajectory...`;
+            btn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Sampling video frames...`;
             lucide.createIcons();
             set3DState('scanning');
-
-            const formData = new FormData();
-            formData.append('file', currentVideoFile);
-
+            let objectUrl = null;
             try {
-                const response = await fetch('/api/index/predict', {
-                    method: 'POST',
-                    body: formData
+                const video = document.createElement('video');
+                video.muted = true;
+                video.playsInline = true;
+                objectUrl = URL.createObjectURL(currentVideoFile);
+                video.src = objectUrl;
+                await new Promise((resolve, reject) => {
+                    video.onloadedmetadata = resolve;
+                    video.onerror = () => reject(new Error("This browser cannot decode the selected video format."));
                 });
-                const contentType = response.headers.get("content-type") || "";
-                if (!response.ok || !contentType.includes("application/json")) {
-                    throw new Error("Video temporal analysis requires the Python PyTorch backend running on http://127.0.0.1:8080 or a deployed Docker container.");
+                if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error("Video duration could not be read.");
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                const count = Math.min(7, Math.max(3, Math.ceil(video.duration / 4)));
+                const trajectory = [];
+                const scores = [];
+                for (let i = 0; i < count; i++) {
+                    const timestamp = count === 1 ? 0 : video.duration * (i + 0.5) / count;
+                    video.currentTime = Math.min(timestamp, Math.max(0, video.duration - 0.05));
+                    await new Promise((resolve) => {
+                        const done = () => { video.removeEventListener('seeked', done); resolve(); };
+                        video.addEventListener('seeked', done, { once: true });
+                        if (Math.abs(video.currentTime - timestamp) < 0.001) resolve();
+                    });
+                    const scale = Math.min(1, 640 / Math.max(video.videoWidth || 640, video.videoHeight || 360));
+                    canvas.width = Math.max(1, Math.round((video.videoWidth || 640) * scale));
+                    canvas.height = Math.max(1, Math.round((video.videoHeight || 360) * scale));
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+                    if (!blob) continue;
+                    const base64 = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                    const form = new FormData();
+                    form.append('file', blob, `frame-${i + 1}.jpg`);
+                    const response = await fetch('/api/index/predict', { method: 'POST', body: form });
+                    if (!response.ok) throw new Error(`Frame ${i + 1} failed with HTTP ${response.status}.`);
+                    const result = await response.json();
+                    scores.push(result);
+                    trajectory.push({
+                        prediction: result.prediction,
+                        real_probability: result.real_probability,
+                        fake_probability: result.fake_probability,
+                        timestamp_sec: Number(timestamp.toFixed(2)),
+                        face_b64: base64,
+                        heatmap_b64: '',
+                        fft_b64: ''
+                    });
+                    btn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Analyzing frame ${i + 1}/${count}...`;
+                    lucide.createIcons();
                 }
-                const data = await response.json();
-
-                lastAnalysisResult = data;
-                renderVideoResults(data);
+                if (!scores.length) throw new Error("No readable frames were extracted.");
+                const fake = scores.reduce((sum, r) => sum + Number(r.fake_probability || 0.5), 0) / scores.length;
+                const real = 1 - fake;
+                const mode = scores.every(r => r.analysis_mode === 'huggingface_model') ? 'huggingface_model' : 'forensic_heuristics';
+                const result = {
+                    prediction: fake >= real ? 'Fake' : 'Real',
+                    confidence: Math.max(fake, real),
+                    fake_probability: fake,
+                    real_probability: real,
+                    frames_analyzed: scores.length,
+                    temporal_variance: scores.reduce((sum, r) => sum + Math.pow(Number(r.fake_probability || 0.5) - fake, 2), 0) / scores.length,
+                    trajectory,
+                    analysis_mode: mode,
+                    model_name: scores[0].model_name,
+                    model_note: mode === 'forensic_heuristics'
+                        ? 'Frame-by-frame image-statistics heuristic only; not a validated video deepfake detector.'
+                        : 'Frame-level model screening aggregated across sampled frames; not proof of authenticity.'
+                };
+                lastAnalysisResult = result;
+                renderVideoResults(result);
                 document.getElementById('export-cert-btn').classList.remove('hidden');
             } catch (err) {
                 alert(`Video Analysis Notice: ${err.message}`);
             } finally {
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
                 btn.disabled = false;
                 btn.innerHTML = `<i data-lucide="play-circle" class="w-4 h-4"></i> Run Video Deep Scan`;
                 lucide.createIcons();
@@ -2104,9 +2162,13 @@ Forensic Verdict: [State in one bold word whether this image feels REAL or FAKE,
         }
 
         function selectVideoFrame(frame) {
-            document.getElementById('v-frame-face').src = `data:image/jpeg;base64,${frame.face_b64}`;
-            document.getElementById('v-frame-xai').src = `data:image/jpeg;base64,${frame.heatmap_b64}`;
-            document.getElementById('v-frame-fft').src = `data:image/jpeg;base64,${frame.fft_b64}`;
+            document.getElementById('v-frame-face').src = `data:image/jpeg;base64,${frame.face_b64 || ''}`;
+            const xai = document.getElementById('v-frame-xai');
+            const fft = document.getElementById('v-frame-fft');
+            xai.src = frame.heatmap_b64 ? `data:image/jpeg;base64,${frame.heatmap_b64}` : '';
+            fft.src = frame.fft_b64 ? `data:image/jpeg;base64,${frame.fft_b64}` : '';
+            xai.alt = frame.heatmap_b64 ? 'Model-provided heatmap' : 'No heatmap produced by the deployed API';
+            fft.alt = frame.fft_b64 ? 'Model-provided frequency visualization' : 'No frequency visualization produced by the deployed API';
         }        async function startWebcam() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
