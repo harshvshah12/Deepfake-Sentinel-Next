@@ -131,11 +131,11 @@ def _forensic_fallback(image: Image.Image) -> dict[str, Any]:
     gy = np.diff(gray, axis=0)
     edge_energy = float((np.mean(np.abs(gx)) + np.mean(np.abs(gy))) / 2)
     # These features are not validated discriminators; keep the output neutral.
-    fake_score = float(np.clip(0.5 + (0.12 - high_freq) * 0.45 + (0.62 - entropy) * 0.08, 0.35, 0.65))
-    real_score = 1.0 - fake_score
+    fake_score = 0.5
+    real_score = 0.5
     return {
-        "prediction": "Fake" if fake_score >= 0.5 else "Real",
-        "confidence": max(fake_score, real_score),
+        "prediction": "Inconclusive",
+        "confidence": 0.5,
         "real_probability": real_score,
         "fake_probability": fake_score,
         "analysis_mode": "forensic_heuristics",
